@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>برنامج متابعة صيانات السيارات - MIFT Car Profile</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Cairo', sans-serif; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3b82f6; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+<script>
+
+/* ============================================================
+   Firebase Security Rules - يجب تطبيقها
+   ============================================================
+   افتح Firebase Console > Firestore Database > Rules
+
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       match /users/{userId} {
+         allow read, write: if request.auth != null && request.auth.uid == userId;
+       }
+       match /cars/{carId} {
+         allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+       }
+       match /repairs/{repairId} {
+         allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+       }
+       match /invoices/{invoiceId} {
+         allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+       }
+     }
+   }
+============================================================ */
+
+        const firebaseConfig = {
+    apiKey: "AIzaSyAVs6ClD59pf6BGHDZ1g7Bc-vN9ZW6UezU",
+    authDomain: "mift-car-profile.firebaseapp.com",
+    projectId: "mift-car-profile",
+    storageBucket: "mift-car-profile.firebasestorage.app",
+    messagingSenderId: "851540250746",
+    appId: "1:851540250746:web:600fc50d92cf054f17abc3"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+</script>
+
+<div id="loading" class="min-h-screen bg-gradient-to-br from-blue-900 to-teal-700 flex items-center justify-center">
+    <div class="text-center text-white">
+        <div class="loader mx-auto mb-4"></div>
+        <p>جاري التحميل...</p>
+    </div>
+</div>
+
+<div id="authScreen" class="hidden min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-teal-700 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
+        <div class="text-center mb-6">
+            <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <svg class="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"></path>
+                </svg>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-800">برنامج متابعة صيانات السيارات</h1>
+            <p class="text-sm text-gray-500">MIFT Car Profile</p>
+        </div>
+        <div id="authMsg" class="hidden p-3 rounded-lg mb-4 text-sm"></div>
+        <div class="flex bg-gray-100 rounded-lg p-1 mb-4">
+            <button onclick="switchAuth('login')" id="loginTab" class="flex-1 py-2 rounded-lg bg-blue-600 text-white transition">دخول</button>
+            <button onclick="switchAuth('register')" id="registerTab" class="flex-1 py-2 rounded-lg text-gray-600 transition">تسجيل</button>
+        </div>
+        <div class="space-y-4">
+            <input type="email" id="authEmail" class="w-full p-3 border rounded-lg" placeholder="البريد الإلكتروني">
+            <input type="password" id="authPassword" class="w-full p-3 border rounded-lg" placeholder="كلمة المرور">
+            <div id="registerFields" class="hidden space-y-4">
+                <input type="password" id="authPassword2" class="w-full p-3 border rounded-lg" placeholder="تأكيد كلمة المرور">
+                <select id="authRole" class="w-full p-3 border rounded-lg">
+                    <option value="user">مستخدم</option>
+                    <option value="admin">مدير نظام</option>
+                </select>
+                <div class="bg-yellow-50 border border-yellow-300 rounded-lg p-3">
+                    <label class="block text-sm text-yellow-800 font-medium mb-1">🔐 كلمة سر مسئول النظام (مطلوبة للتسجيل)</label>
+                    <input type="password" id="adminSecretKey" class="w-full p-3 border border-yellow-300 rounded-lg" placeholder="أدخل كلمة سر المسئول">
+                </div>
+            </div>
+            <button onclick="submitAuth()" id="authBtn" class="w-full bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 font-medium">دخول</button>
+        </div>
+    </div>
+</div>
+
+<div id="mainApp" class="hidden">
+    <header class="bg-gradient-to-l from-blue-900 to-blue-700 text-white shadow-lg">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <div>
+                <h1 class="text-xl font-bold">برنامج متابعة صيانات السيارات</h1>
+                <p class="text-xs opacity-75">MIFT Car Profile</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <span id="userEmail" class="text-sm bg-white/20 px-3 py-1 rounded-full"></span>
+                <button onclick="logout()" class="bg-red-500 px-3 py-1 rounded text-sm hover:bg-red-600">خروج</button>
+            </div>
+        </div>
+    </header>
+    
+    <nav class="bg-white shadow">
+        <div class="container mx-auto flex">
+            <button onclick="showScreen('cars')" id="navCars" class="px-6 py-3 font-medium text-blue-600 border-b-2 border-blue-600">السيارات</button>
+            <button onclick="showScreen('maintenance')" id="navMaintenance" class="px-6 py-3 font-medium text-gray-600 border-b-2 border-transparent">الصيانات</button>
+            <button onclick="showScreen('reports')" id="navReports" class="px-6 py-3 font-medium text-gray-600 border-b-2 border-transparent">التقارير</button>
+        </div>
+    </nav>
+    
+    <div id="carsScreen" class="container mx-auto p-4">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold">السيارات</h2>
+            <button onclick="openCarForm()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">+ إضافة سيارة</button>
+        </div>
+        <div id="carsList" class="space-y-3"></div>
+    </div>
+    
+    <div id="maintenanceScreen" class="hidden container mx-auto p-4">
+        <div class="bg-white rounded-lg shadow p-4 mb-4">
+            <label class="block mb-2 font-medium">اختر السيارة</label>
+            <select id="carSelect" onchange="loadCarData()" class="w-full p-3 border rounded-lg">
+                <option value="">-- اختر سيارة --</option>
+            </select>
+        </div>
+        <div id="carDetails" class="hidden">
+            <div id="selectedCarInfo" class="bg-blue-50 rounded-lg p-4 mb-4"></div>
+            <div class="flex gap-2 mb-4">
+                <button onclick="showTab('repairs')" id="tabRepairs" class="flex-1 py-2 rounded-lg bg-blue-600 text-white">الإصلاحات</button>
+                <button onclick="showTab('invoices')" id="tabInvoices" class="flex-1 py-2 rounded-lg bg-white">الفواتير</button>
+            </div>
+            <div id="repairsTab" class="bg-white rounded-lg shadow p-4">
+                <div class="flex justify-between mb-4">
+                    <h3 class="font-bold">طلبات الإصلاح</h3>
+                    <button onclick="openRepairForm()" class="bg-blue-600 text-white px-3 py-1 rounded text-sm">+ إضافة</button>
+                </div>
+                <div id="repairsList"></div>
+            </div>
+            <div id="invoicesTab" class="hidden bg-white rounded-lg shadow p-4">
+                <div class="flex justify-between mb-4">
+                    <h3 class="font-bold">الفواتير</h3>
+                    <button onclick="openInvoiceForm()" class="bg-blue-600 text-white px-3 py-1 rounded text-sm">+ إضافة</button>
+                </div>
+                <div id="invoicesList"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="reportsScreen" class="hidden container mx-auto p-4">
+        <div class="bg-white rounded-lg shadow p-4 mb-4">
+            <h2 class="font-bold mb-4 text-lg">البحث والتقارير</h2>
+            
+            <!-- نوع البحث -->
+            <div class="flex gap-2 mb-4 flex-wrap">
+                <button onclick="setSearchType('car')" id="searchTypeCar" class="px-4 py-2 rounded-lg bg-blue-600 text-white">بحث بالسيارة</button>
+                <button onclick="setSearchType('invoice')" id="searchTypeInvoice" class="px-4 py-2 rounded-lg bg-gray-200">بحث برقم فاتورة</button>
+                <button onclick="setSearchType('item')" id="searchTypeItem" class="px-4 py-2 rounded-lg bg-gray-200">بحث بصنف</button>
+            </div>
+            
+            <!-- بحث بالسيارة -->
+            <div id="searchByCar" class="space-y-3">
+                <div class="flex gap-2">
+                    <input id="searchQuery" class="flex-1 p-3 border rounded-lg" placeholder="ابحث برقم اللوحة، الماركة...">
+                    <button onclick="searchCars()" class="bg-blue-600 text-white px-6 rounded-lg">بحث</button>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-600 mb-1">أو اختر سيارة لعرض كل بياناتها:</label>
+                    <select id="reportCarSelect" onchange="loadCarReport()" class="w-full p-3 border rounded-lg">
+                        <option value="">-- اختر سيارة --</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- بحث برقم فاتورة -->
+            <div id="searchByInvoice" class="hidden">
+                <div class="flex gap-2">
+                    <input id="invoiceSearchQuery" class="flex-1 p-3 border rounded-lg" placeholder="أدخل رقم الفاتورة...">
+                    <button onclick="searchByInvoiceNum()" class="bg-blue-600 text-white px-6 rounded-lg">بحث</button>
+                </div>
+            </div>
+            
+            <!-- بحث بصنف -->
+            <div id="searchByItem" class="hidden">
+                <div class="flex gap-2">
+                    <input id="itemSearchQuery" class="flex-1 p-3 border rounded-lg" placeholder="أدخل اسم الصنف...">
+                    <button onclick="searchByItemName()" class="bg-blue-600 text-white px-6 rounded-lg">بحث</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- نتائج البحث بالسيارات -->
+        <div id="searchResults" class="hidden bg-white rounded-lg shadow p-4 mb-4">
+            <div class="flex justify-between mb-4">
+                <h3 class="font-bold">نتائج البحث</h3>
+                <button onclick="exportCSV()" class="bg-green-600 text-white px-4 py-1 rounded text-sm">تصدير CSV</button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="p-2 text-right">اللوحة</th>
+                            <th class="p-2 text-right">الماركة</th>
+                            <th class="p-2 text-right">الموديل</th>
+                            <th class="p-2 text-right">النوع</th>
+                            <th class="p-2 text-right">الحالة</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsBody"></tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- تقرير السيارة الشامل -->
+        <div id="carReportSection" class="hidden">
+            <div class="bg-white rounded-lg shadow p-4 mb-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-bold text-lg">تقرير شامل للسيارة</h3>
+                    <button onclick="downloadCarReportPDF()" class="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+                        <span>📄</span> تحميل PDF
+                    </button>
+                </div>
+                <div id="carReportContent"></div>
+            </div>
+        </div>
+        
+        <!-- نتائج البحث بالفاتورة -->
+        <div id="invoiceSearchResults" class="hidden bg-white rounded-lg shadow p-4 mb-4">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold">نتائج البحث بالفاتورة</h3>
+                <button onclick="downloadInvoiceReportPDF()" class="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+                    <span>📄</span> تحميل PDF
+                </button>
+            </div>
+            <div id="invoiceResultsContent"></div>
+        </div>
+        
+        <!-- نتائج البحث بالصنف -->
+        <div id="itemSearchResults" class="hidden bg-white rounded-lg shadow p-4 mb-4">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold">نتائج البحث بالصنف</h3>
+                <button onclick="downloadItemReportPDF()" class="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+                    <span>📄</span> تحميل PDF
+                </button>
+            </div>
+            <div id="itemResultsContent"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Car Form Modal - محدث بالحقول الجديدة -->
+<div id="carModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6">
+        <h3 id="carFormTitle" class="text-lg font-bold mb-4 text-blue-800">إضافة سيارة</h3>
+        
+        <!-- البيانات الأساسية -->
+        <div class="bg-blue-50 p-4 rounded-lg mb-4">
+            <h4 class="font-bold text-blue-700 mb-3">البيانات الأساسية *</h4>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <input id="plateL" class="p-2 border rounded" placeholder="حروف اللوحة *">
+                <input id="plateN" class="p-2 border rounded" placeholder="أرقام اللوحة *">
+                <input id="brand" class="p-2 border rounded" placeholder="الماركة *">
+                <input id="year" class="p-2 border rounded" placeholder="سنة الموديل *">
+                <input id="engine" class="p-2 border rounded" placeholder="رقم الموتور *">
+                <input id="chassis" class="p-2 border rounded" placeholder="رقم الشاسية *">
+                <input id="cyl" class="p-2 border rounded" placeholder="عدد السلندرات *">
+                <select id="carType" class="p-2 border rounded">
+                    <option value="">نوع السيارة *</option>
+                    <option>ليموزين</option><option>جيب</option><option>ميكروباص</option>
+                    <option>مينى باص</option><option>اتوبيس</option><option>بيك اب</option>
+                </select>
+                <select id="status" class="p-2 border rounded">
+                    <option value="">حالة السيارة *</option>
+                    <option>صالحة</option><option>تحت الاصلاح</option><option>معطلة</option><option>مكهنة</option>
+                </select>
+                <div>
+                    <label class="block text-xs text-gray-600 mb-1">تاريخ بداية الترخيص *</label>
+                    <input type="date" id="licStart" class="p-2 border rounded w-full">
+                </div>
+                <input id="licAuth" class="p-2 border rounded" placeholder="جهة الترخيص *">
+                <select id="fuel" class="p-2 border rounded">
+                    <option value="">نوع الوقود *</option>
+                    <option>بنزين</option><option>سولار</option><option>غاز طبيعى</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- البيانات الاختيارية -->
+        <div class="bg-gray-50 p-4 rounded-lg mb-4">
+            <h4 class="font-bold text-gray-700 mb-3">بيانات إضافية (اختيارى)</h4>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <input id="carUsers" class="p-2 border rounded" placeholder="مستخدمو السيارة (الوظيفة)">
+                <input id="custodian" class="p-2 border rounded" placeholder="اسم الشخص بعهدته السيارة">
+                <div>
+                    <label class="block text-xs text-gray-600 mb-1">تاريخ تجديد الترخيص</label>
+                    <input type="date" id="licRenewal" class="p-2 border rounded w-full">
+                </div>
+                <input id="ownership" class="p-2 border rounded" placeholder="تسلسل ملكية السيارة">
+                <div>
+                    <label class="block text-xs text-gray-600 mb-1">تاريخ إجراء الصيانة</label>
+                    <input type="date" id="maintDate" class="p-2 border rounded w-full">
+                </div>
+                <input id="odometer" class="p-2 border rounded" placeholder="قراءة عداد السيارة">
+                <input id="maintOdometer" class="p-2 border rounded" placeholder="العداد عند إجراء الصيانة">
+                <input id="maintTasks" class="p-2 border rounded" placeholder="المهام المنفذة / قطع الغيار">
+                <input id="supplier" class="p-2 border rounded" placeholder="اسم المورد وطريقة التعاقد">
+                <div>
+                    <label class="block text-xs text-gray-600 mb-1">موعد الصيانة المستقبلى</label>
+                    <input type="date" id="nextMaint" class="p-2 border rounded w-full">
+                </div>
+            </div>
+        </div>
+        
+        <!-- صورة الرخصة -->
+        <div class="bg-yellow-50 p-4 rounded-lg mb-4">
+            <h4 class="font-bold text-yellow-700 mb-3">صورة الرخصة (اختيارى)</h4>
+            <div class="flex items-center gap-4">
+                <input type="file" id="licImage" accept="image/*" onchange="previewImage(event)" class="text-sm">
+                <div id="imagePreview" class="hidden">
+                    <img id="previewImg" class="h-20 rounded border">
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex gap-2 justify-end">
+            <button onclick="closeCarForm()" class="px-4 py-2 border rounded hover:bg-gray-100">إلغاء</button>
+            <button onclick="saveCar()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">حفظ</button>
+        </div>
+    </div>
+</div>
+
+<!-- Repair Form Modal -->
+<div id="repairModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+        <h3 class="font-bold mb-4">إضافة / تعديل طلب إصلاح</h3>
+        <div class="space-y-3">
+            <div>
+                <label class="block text-xs text-gray-600 mb-1">التاريخ *</label>
+                <input type="date" id="repairDate" class="w-full p-2 border rounded">
+            </div>
+            <input id="repairDriver" class="w-full p-2 border rounded" placeholder="اسم السائق *">
+            <input id="repairOdometer" class="w-full p-2 border rounded" placeholder="قراءة العداد">
+            
+            <!-- الأصناف -->
+            <div class="bg-gray-50 p-3 rounded-lg">
+                <div class="flex justify-between items-center mb-2">
+                    <label class="font-medium text-sm">الأصناف</label>
+                    <button type="button" onclick="addRepairItem()" class="bg-green-500 text-white px-2 py-1 rounded text-xs">+ إضافة صنف</button>
+                </div>
+                <div id="repairItemsList" class="space-y-2"></div>
+            </div>
+            
+            <div>
+                <label class="block text-xs text-gray-600 mb-1">ملف PDF للطلب (اختياري)</label>
+                <input type="file" id="repairPdf" accept=".pdf" onchange="previewRepairPdf(event)" class="w-full p-2 border rounded text-sm">
+                <div id="repairPdfPreview" class="hidden mt-2 p-2 bg-gray-100 rounded flex items-center gap-2">
+                    <span class="text-red-600">📄</span>
+                    <span id="repairPdfName" class="text-sm"></span>
+                    <button onclick="removeRepairPdf()" class="text-red-500 text-sm mr-auto">حذف</button>
+                </div>
+            </div>
+        </div>
+        <div class="flex gap-2 mt-4 justify-end">
+            <button onclick="closeRepairForm()" class="px-4 py-2 border rounded">إلغاء</button>
+            <button onclick="saveRepair()" class="px-4 py-2 bg-blue-600 text-white rounded">حفظ</button>
+        </div>
+    </div>
+</div>
+
+<!-- Invoice Form Modal -->
+<div id="invoiceModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+        <h3 class="font-bold mb-4">إضافة / تعديل فاتورة</h3>
+        <div class="space-y-3">
+            <input id="invNum" class="w-full p-2 border rounded" placeholder="رقم الفاتورة *">
+            <input id="invVendor" class="w-full p-2 border rounded" placeholder="اسم الجهة *">
+            
+            <!-- الأصناف -->
+            <div class="bg-gray-50 p-3 rounded-lg">
+                <div class="flex justify-between items-center mb-2">
+                    <label class="font-medium text-sm">الأصناف</label>
+                    <button type="button" onclick="addInvItem()" class="bg-green-500 text-white px-2 py-1 rounded text-xs">+ إضافة صنف</button>
+                </div>
+                <div id="invItemsList" class="space-y-2"></div>
+            </div>
+            
+            <div>
+                <label class="block text-xs text-gray-600 mb-1">ملف PDF للفاتورة (اختياري)</label>
+                <input type="file" id="invPdf" accept=".pdf" onchange="previewInvPdf(event)" class="w-full p-2 border rounded text-sm">
+                <div id="invPdfPreview" class="hidden mt-2 p-2 bg-gray-100 rounded flex items-center gap-2">
+                    <span class="text-red-600">📄</span>
+                    <span id="invPdfName" class="text-sm"></span>
+                    <button onclick="removeInvPdf()" class="text-red-500 text-sm mr-auto">حذف</button>
+                </div>
+            </div>
+        </div>
+        <div class="flex gap-2 mt-4 justify-end">
+            <button onclick="closeInvoiceForm()" class="px-4 py-2 border rounded">إلغاء</button>
+            <button onclick="saveInvoice()" class="px-4 py-2 bg-blue-600 text-white rounded">حفظ</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentUser = null;
+let authMode = 'login';
+let editingCarId = null;
+let selectedCarId = null;
+let allCars = [];
+let licenseImageBase64 = '';
+let repairPdfBase64 = '';
+let invPdfBase64 = '';
+let repairItems = [];
+let invItems = [];
+
+// Repair Items Functions
+function addRepairItem() {
+    const id = Date.now();
+    repairItems.push({ id: id, name: '', desc: '', inStock: false });
+    renderRepairItems();
+}
+
+function removeRepairItem(id) {
+    repairItems = repairItems.filter(item => item.id !== id);
+    renderRepairItems();
+}
+
+function updateRepairItem(id, field, value) {
+    const item = repairItems.find(i => i.id === id);
+    if (item) item[field] = value;
+}
+
+function toggleRepairItemStock(id) {
+    const item = repairItems.find(i => i.id === id);
+    if (item) item.inStock = !item.inStock;
+    renderRepairItems();
+}
+
+function renderRepairItems() {
+    const container = document.getElementById('repairItemsList');
+    if (repairItems.length === 0) {
+        container.innerHTML = '<p class="text-gray-400 text-sm text-center py-2">لا توجد أصناف - اضغط "إضافة صنف"</p>';
+        return;
+    }
+    container.innerHTML = repairItems.map(item => 
+        '<div class="bg-white p-2 rounded border">' +
+        '<div class="flex gap-2 items-center mb-2">' +
+        '<input type="text" value="' + (item.name || '') + '" onchange="updateRepairItem(' + item.id + ', \'name\', this.value)" class="flex-1 p-1 border rounded text-sm" placeholder="اسم الصنف">' +
+        '<input type="text" value="' + (item.desc || '') + '" onchange="updateRepairItem(' + item.id + ', \'desc\', this.value)" class="flex-1 p-1 border rounded text-sm" placeholder="الوصف">' +
+        '<button onclick="removeRepairItem(' + item.id + ')" class="text-red-500 p-1">✕</button>' +
+        '</div>' +
+        '<label class="flex items-center gap-2 text-sm cursor-pointer">' +
+        '<input type="checkbox" ' + (item.inStock ? 'checked' : '') + ' onchange="toggleRepairItemStock(' + item.id + ')" class="w-4 h-4">' +
+        '<span class="' + (item.inStock ? 'text-green-600 font-medium' : 'text-gray-600') + '">' + (item.inStock ? '✓ متوفر بالمخزن' : 'متوفر بالمخزن؟') + '</span>' +
+        '</label>' +
+        '</div>'
+    ).join('');
+}
+
+// Invoice Items Functions
+function addInvItem() {
+    const id = Date.now();
+    invItems.push({ id: id, name: '', price: '', qty: '' });
+    renderInvItems();
+}
+
+function removeInvItem(id) {
+    invItems = invItems.filter(item => item.id !== id);
+    renderInvItems();
+}
+
+function updateInvItem(id, field, value) {
+    const item = invItems.find(i => i.id === id);
+    if (item) item[field] = value;
+    if (field === 'price' || field === 'qty') {
+    }
+}
+
+
+function renderInvItems() {
+    const container = document.getElementById('invItemsList');
+    if (invItems.length === 0) {
+        container.innerHTML = '<p class="text-gray-400 text-sm text-center py-2">لا توجد أصناف - اضغط "إضافة صنف"</p>';
+        return;
+    }
+    container.innerHTML = invItems.map(item => {
+        const price = parseFloat(item.price) || 0;
+        const qty = parseFloat(item.qty) || 0;
+        const itemTotal = price * qty;
+        return '<div class="bg-white p-2 rounded border">' +
+        '<div class="flex gap-2 items-center mb-1">' +
+        '<input type="text" value="' + (item.name || '') + '" onchange="updateInvItem(' + item.id + ', \'name\', this.value)" class="flex-1 p-1 border rounded text-sm" placeholder="اسم الصنف">' +
+        '<button onclick="removeInvItem(' + item.id + ')" class="text-red-500 p-1">✕</button>' +
+        '</div>' +
+        '<div class="flex gap-2 items-center">' +
+        '<div class="flex-1"><label class="text-xs text-gray-500">السعر</label><input type="number" value="' + (item.price || '') + '" onchange="updateInvItem(' + item.id + ', \'price\', this.value)" oninput="updateInvItem(' + item.id + ', \'price\', this.value)" class="w-full p-1 border rounded text-sm" placeholder="0.00"></div>' +
+        '<div class="w-20"><label class="text-xs text-gray-500">الكمية</label><input type="number" value="' + (item.qty || '') + '" onchange="updateInvItem(' + item.id + ', \'qty\', this.value)" oninput="updateInvItem(' + item.id + ', \'qty\', this.value)" class="w-full p-1 border rounded text-sm" placeholder="1"></div>' +
+        '<div class="w-24 text-left"><label class="text-xs text-gray-500">الإجمالي</label><div class="p-1 bg-gray-100 rounded text-sm font-medium">' + itemTotal.toFixed(2) + '</div></div>' +
+        '</div>' +
+        '</div>';
+    }).join('');
+}
+
+// Preview image function
+function previewImage(event) {
+    const file = event.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            licenseImageBase64 = e.target.result;
+            document.getElementById('previewImg').src = licenseImageBase64;
+            document.getElementById('imagePreview').classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+// Preview repair PDF
+function previewRepairPdf(event) {
+    const file = event.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            repairPdfBase64 = e.target.result;
+            document.getElementById('repairPdfName').textContent = file.name;
+            document.getElementById('repairPdfPreview').classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+function removeRepairPdf() {
+    repairPdfBase64 = '';
+    document.getElementById('repairPdf').value = '';
+    document.getElementById('repairPdfPreview').classList.add('hidden');
+}
+
+// Preview invoice PDF
+function previewInvPdf(event) {
+    const file = event.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            invPdfBase64 = e.target.result;
+            document.getElementById('invPdfName').textContent = file.name;
+            document.getElementById('invPdfPreview').classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+function removeInvPdf() {
+    invPdfBase64 = '';
+    document.getElementById('invPdf').value = '';
+    document.getElementById('invPdfPreview').classList.add('hidden');
+}
+
+auth.onAuthStateChanged(user => {
+    document.getElementById('loading').classList.add('hidden');
+    if (user) {
+        currentUser = user;
+        document.getElementById('userEmail').textContent = user.email;
+        document.getElementById('authScreen').classList.add('hidden');
+        document.getElementById('mainApp').classList.remove('hidden');
+        loadCars();
+    } else {
+        document.getElementById('authScreen').classList.remove('hidden');
+        document.getElementById('mainApp').classList.add('hidden');
+    }
+});
+
+function switchAuth(mode) {
+    authMode = mode;
+    document.getElementById('loginTab').className = mode === 'login' ? 'flex-1 py-2 rounded-lg bg-blue-600 text-white transition' : 'flex-1 py-2 rounded-lg text-gray-600 transition';
+    document.getElementById('registerTab').className = mode === 'register' ? 'flex-1 py-2 rounded-lg bg-blue-600 text-white transition' : 'flex-1 py-2 rounded-lg text-gray-600 transition';
+    document.getElementById('registerFields').classList.toggle('hidden', mode === 'login');
+    document.getElementById('authBtn').textContent = mode === 'login' ? 'دخول' : 'تسجيل';
+}
+
+function showAuthMsg(msg, isError) {
+    const el = document.getElementById('authMsg');
+    el.textContent = msg;
+    el.className = 'p-3 rounded-lg mb-4 text-sm ' + (isError ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700');
+    el.classList.remove('hidden');
+}
+
+async function submitAuth() {
+    const email = document.getElementById('authEmail').value;
+    const password = document.getElementById('authPassword').value;
+    if (!email || !password) { showAuthMsg('يرجى ملء الحقول', true); return; }
+    try {
+        if (authMode === 'login') {
+            await auth.signInWithEmailAndPassword(email, password);
+        } else {
+            // Check admin secret key first
+            const adminKey = document.getElementById('adminSecretKey').value;
+            if (adminKey !== 'admin@123') {
+                showAuthMsg('كلمة سر مسئول النظام غير صحيحة - لا يمكن إنشاء حساب', true);
+                return;
+            }
+            
+            const pw2 = document.getElementById('authPassword2').value;
+            if (password !== pw2) { showAuthMsg('كلمة المرور غير متطابقة', true); return; }
+            const cred = await auth.createUserWithEmailAndPassword(email, password);
+            await db.collection('users').doc(cred.user.uid).set({
+                email: email,
+                role: document.getElementById('authRole').value,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+    } catch (e) { showAuthMsg(e.message, true); }
+}
+
+function logout() { auth.signOut(); }
+
+function showScreen(screen) {
+    ['cars', 'maintenance', 'reports'].forEach(s => {
+        document.getElementById(s + 'Screen').classList.toggle('hidden', s !== screen);
+        document.getElementById('nav' + s.charAt(0).toUpperCase() + s.slice(1)).className = s === screen ? 'px-6 py-3 font-medium text-blue-600 border-b-2 border-blue-600' : 'px-6 py-3 font-medium text-gray-600 border-b-2 border-transparent';
+    });
+    if (screen === 'maintenance') updateCarSelect();
+    if (screen === 'reports') updateReportCarSelect();
+}
+
+async function loadCars() {
+    const snapshot = await db.collection('cars').where('userId', '==', currentUser.uid).get();
+    allCars = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    renderCars();
+}
+
+function renderCars() {
+    const container = document.getElementById('carsList');
+    if (allCars.length === 0) {
+        container.innerHTML = '<div class="bg-white rounded-lg p-8 text-center text-gray-500">لا توجد سيارات مسجلة</div>';
+        return;
+    }
+    container.innerHTML = allCars.map(c => '<div class="bg-white rounded-lg shadow p-4 flex justify-between items-center"><div class="flex items-center gap-4">' + (c.licImage ? '<img src="' + c.licImage + '" class="w-16 h-16 object-cover rounded">' : '<div class="w-16 h-16 bg-gray-200 rounded flex items-center justify-center text-gray-400">لا صورة</div>') + '<div><h3 class="font-bold">' + c.plateL + ' - ' + c.plateN + '</h3><p class="text-gray-600 text-sm">' + c.brand + ' - ' + c.year + '</p><div class="flex gap-2 mt-1"><span class="text-xs px-2 py-1 rounded ' + (c.status === 'صالحة' ? 'bg-green-100 text-green-800' : c.status === 'معطلة' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800') + '">' + c.status + '</span><span class="text-xs px-2 py-1 rounded bg-blue-100 text-blue-800">' + c.carType + '</span></div></div></div><div class="flex gap-2"><button onclick="viewCar(\'' + c.id + '\')" class="text-green-600 hover:bg-green-50 p-2 rounded">عرض</button><button onclick="editCar(\'' + c.id + '\')" class="text-blue-600 hover:bg-blue-50 p-2 rounded">تعديل</button><button onclick="deleteCar(\'' + c.id + '\')" class="text-red-600 hover:bg-red-50 p-2 rounded">حذف</button></div></div>').join('');
+}
+
+function openCarForm() {
+    editingCarId = null;
+    licenseImageBase64 = '';
+    document.getElementById('carFormTitle').textContent = 'إضافة سيارة جديدة';
+    // Clear all fields
+    ['plateL','plateN','brand','year','engine','chassis','cyl','licStart','licAuth','carUsers','custodian','licRenewal','ownership','maintDate','odometer','maintOdometer','maintTasks','supplier','nextMaint'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('carType').value = '';
+    document.getElementById('status').value = '';
+    document.getElementById('fuel').value = '';
+    document.getElementById('licImage').value = '';
+    document.getElementById('imagePreview').classList.add('hidden');
+    document.getElementById('carModal').classList.remove('hidden');
+}
+
+function viewCar(id) {
+    const car = allCars.find(c => c.id === id);
+    if (!car) return;
+    let details = 'بيانات السيارة:\n\n';
+    details += 'اللوحة: ' + car.plateL + ' - ' + car.plateN + '\n';
+    details += 'الماركة: ' + car.brand + '\n';
+    details += 'سنة الموديل: ' + car.year + '\n';
+    details += 'رقم الموتور: ' + car.engine + '\n';
+    details += 'رقم الشاسية: ' + car.chassis + '\n';
+    details += 'عدد السلندرات: ' + car.cyl + '\n';
+    details += 'نوع السيارة: ' + car.carType + '\n';
+    details += 'الحالة: ' + car.status + '\n';
+    details += 'نوع الوقود: ' + car.fuel + '\n';
+    details += 'تاريخ الترخيص: ' + (car.licStart || '-') + '\n';
+    details += 'جهة الترخيص: ' + car.licAuth + '\n';
+    if (car.carUsers) details += 'مستخدمو السيارة: ' + car.carUsers + '\n';
+    if (car.custodian) details += 'بعهدة: ' + car.custodian + '\n';
+    if (car.licRenewal) details += 'تاريخ تجديد الترخيص: ' + car.licRenewal + '\n';
+    if (car.ownership) details += 'تسلسل الملكية: ' + car.ownership + '\n';
+    if (car.maintDate) details += 'تاريخ الصيانة: ' + car.maintDate + '\n';
+    if (car.odometer) details += 'قراءة العداد: ' + car.odometer + '\n';
+    if (car.maintOdometer) details += 'العداد عند الصيانة: ' + car.maintOdometer + '\n';
+    if (car.maintTasks) details += 'المهام/قطع الغيار: ' + car.maintTasks + '\n';
+    if (car.supplier) details += 'المورد: ' + car.supplier + '\n';
+    if (car.nextMaint) details += 'الصيانة القادمة: ' + car.nextMaint + '\n';
+    alert(details);
+}
+
+function editCar(id) {
+    const car = allCars.find(c => c.id === id);
+    if (!car) return;
+    editingCarId = id;
+    licenseImageBase64 = car.licImage || '';
+    document.getElementById('carFormTitle').textContent = 'تعديل بيانات السيارة';
+    document.getElementById('plateL').value = car.plateL || '';
+    document.getElementById('plateN').value = car.plateN || '';
+    document.getElementById('brand').value = car.brand || '';
+    document.getElementById('year').value = car.year || '';
+    document.getElementById('engine').value = car.engine || '';
+    document.getElementById('chassis').value = car.chassis || '';
+    document.getElementById('cyl').value = car.cyl || '';
+    document.getElementById('carType').value = car.carType || '';
+    document.getElementById('status').value = car.status || '';
+    document.getElementById('licStart').value = car.licStart || '';
+    document.getElementById('licAuth').value = car.licAuth || '';
+    document.getElementById('fuel').value = car.fuel || '';
+    document.getElementById('carUsers').value = car.carUsers || '';
+    document.getElementById('custodian').value = car.custodian || '';
+    document.getElementById('licRenewal').value = car.licRenewal || '';
+    document.getElementById('ownership').value = car.ownership || '';
+    document.getElementById('maintDate').value = car.maintDate || '';
+    document.getElementById('odometer').value = car.odometer || '';
+    document.getElementById('maintOdometer').value = car.maintOdometer || '';
+    document.getElementById('maintTasks').value = car.maintTasks || '';
+    document.getElementById('supplier').value = car.supplier || '';
+    document.getElementById('nextMaint').value = car.nextMaint || '';
+    if (car.licImage) {
+        document.getElementById('previewImg').src = car.licImage;
+        document.getElementById('imagePreview').classList.remove('hidden');
+    } else {
+        document.getElementById('imagePreview').classList.add('hidden');
+    }
+    document.getElementById('carModal').classList.remove('hidden');
+}
+
+function closeCarForm() { document.getElementById('carModal').classList.add('hidden'); }
+
+async function saveCar() {
+    const data = {
+        plateL: document.getElementById('plateL').value,
+        plateN: document.getElementById('plateN').value,
+        brand: document.getElementById('brand').value,
+        year: document.getElementById('year').value,
+        engine: document.getElementById('engine').value,
+        chassis: document.getElementById('chassis').value,
+        cyl: document.getElementById('cyl').value,
+        carType: document.getElementById('carType').value,
+        status: document.getElementById('status').value,
+        licStart: document.getElementById('licStart').value,
+        licAuth: document.getElementById('licAuth').value,
+        fuel: document.getElementById('fuel').value,
+        carUsers: document.getElementById('carUsers').value,
+        custodian: document.getElementById('custodian').value,
+        licRenewal: document.getElementById('licRenewal').value,
+        ownership: document.getElementById('ownership').value,
+        maintDate: document.getElementById('maintDate').value,
+        odometer: document.getElementById('odometer').value,
+        maintOdometer: document.getElementById('maintOdometer').value,
+        maintTasks: document.getElementById('maintTasks').value,
+        supplier: document.getElementById('supplier').value,
+        nextMaint: document.getElementById('nextMaint').value,
+        licImage: licenseImageBase64,
+        userId: currentUser.uid
+    };
+    
+    if (!data.plateL || !data.plateN || !data.brand || !data.year || !data.engine || !data.chassis || !data.cyl || !data.carType || !data.status || !data.licStart || !data.licAuth || !data.fuel) {
+        alert('يرجى ملء جميع الحقول الأساسية'); return;
+    }
+    
+    try {
+        if (editingCarId) { await db.collection('cars').doc(editingCarId).update(data); }
+        else { await db.collection('cars').add(data); }
+        closeCarForm(); loadCars();
+        alert('تم الحفظ بنجاح');
+    } catch (e) { alert('خطأ: ' + e.message); }
+}
+
+async function deleteCar(id) {
+    if (!confirm('هل أنت متأكد من حذف السيارة؟')) return;
+    await db.collection('cars').doc(id).delete();
+    loadCars();
+}
+
+function updateCarSelect() {
+    document.getElementById('carSelect').innerHTML = '<option value="">-- اختر سيارة --</option>' + allCars.map(c => '<option value="' + c.id + '">' + c.plateL + ' - ' + c.plateN + ' (' + c.brand + ')</option>').join('');
+}
+
+async function loadCarData() {
+    selectedCarId = document.getElementById('carSelect').value;
+    if (!selectedCarId) { document.getElementById('carDetails').classList.add('hidden'); return; }
+    const car = allCars.find(c => c.id === selectedCarId);
+    document.getElementById('selectedCarInfo').innerHTML = '<strong>السيارة:</strong> ' + car.plateL + ' - ' + car.plateN + ' | ' + car.brand + ' ' + car.year + ' | ' + car.status;
+    document.getElementById('carDetails').classList.remove('hidden');
+    loadRepairs(); loadInvoices();
+}
+
+function showTab(tab) {
+    document.getElementById('repairsTab').classList.toggle('hidden', tab !== 'repairs');
+    document.getElementById('invoicesTab').classList.toggle('hidden', tab !== 'invoices');
+    document.getElementById('tabRepairs').className = tab === 'repairs' ? 'flex-1 py-2 rounded-lg bg-blue-600 text-white' : 'flex-1 py-2 rounded-lg bg-white';
+    document.getElementById('tabInvoices').className = tab === 'invoices' ? 'flex-1 py-2 rounded-lg bg-blue-600 text-white' : 'flex-1 py-2 rounded-lg bg-white';
+}
+
+async function loadRepairs() {
+    const snapshot = await db.collection('repairs').where('carId', '==', selectedCarId).get();
+    const repairs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    document.getElementById('repairsList').innerHTML = repairs.length === 0 ? '<p class="text-gray-500 text-center py-4">لا توجد طلبات</p>' : repairs.map(r => {
+        const itemsCount = r.items ? r.items.length : 0;
+        const itemsText = itemsCount > 0 ? ' (' + itemsCount + ' صنف)' : '';
+        return '<div class="border-b py-3 flex justify-between items-center"><div><strong>' + (r.date || '') + '</strong> - ' + (r.driver || '') + itemsText + (r.odometer ? ' - العداد: ' + r.odometer : '') + (r.pdfFile ? ' <span class="text-red-600">📄</span>' : '') + '</div><div class="flex gap-2">' + (r.pdfFile ? '<button onclick="openPdf(\'' + r.id + '\', \'repair\')" class="text-red-600 hover:bg-red-50 px-2 py-1 rounded text-sm">PDF</button>' : '') + '<button onclick="viewRepair(\'' + r.id + '\')" class="text-green-600 hover:bg-green-50 px-2 py-1 rounded text-sm">عرض</button><button onclick="editRepair(\'' + r.id + '\')" class="text-blue-600 hover:bg-blue-50 px-2 py-1 rounded text-sm">تعديل</button><button onclick="deleteRepair(\'' + r.id + '\')" class="text-red-600 hover:bg-red-50 px-2 py-1 rounded text-sm">حذف</button></div></div>';
+    }).join('');
+    window.repairsData = repairs;
+}
+
+async function loadInvoices() {
+    const snapshot = await db.collection('invoices').where('carId', '==', selectedCarId).get();
+    const invoices = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    document.getElementById('invoicesList').innerHTML = invoices.length === 0 ? '<p class="text-gray-500 text-center py-4">لا توجد فواتير</p>' : invoices.map(i => {
+        const itemsCount = i.items ? i.items.length : 0;
+        const itemsText = itemsCount > 0 ? ' (' + itemsCount + ' صنف)' : '';
+        return '<div class="border-b py-3 flex justify-between items-center"><div><strong>#' + i.num + '</strong> - ' + i.vendor + ' - ' + i.total + ' ج.م' + itemsText + (i.pdfFile ? ' <span class="text-red-600">📄</span>' : '') + '</div><div class="flex gap-2">' + (i.pdfFile ? '<button onclick="openPdf(\'' + i.id + '\', \'invoice\')" class="text-red-600 hover:bg-red-50 px-2 py-1 rounded text-sm">PDF</button>' : '') + '<button onclick="viewInvoice(\'' + i.id + '\')" class="text-green-600 hover:bg-green-50 px-2 py-1 rounded text-sm">عرض</button><button onclick="editInvoice(\'' + i.id + '\')" class="text-blue-600 hover:bg-blue-50 px-2 py-1 rounded text-sm">تعديل</button><button onclick="deleteInvoice(\'' + i.id + '\')" class="text-red-600 hover:bg-red-50 px-2 py-1 rounded text-sm">حذف</button></div></div>';
+    }).join('');
+    window.invoicesData = invoices;
+}
+
+function openRepairForm(editId = null) {
+    window.editingRepairId = editId;
+    repairPdfBase64 = '';
+    repairItems = [];
+    document.getElementById('repairPdf').value = '';
+    document.getElementById('repairPdfPreview').classList.add('hidden');
+    
+    if (editId && window.repairsData) {
+        const r = window.repairsData.find(x => x.id === editId);
+        if (r) {
+            document.getElementById('repairDate').value = r.date || '';
+            document.getElementById('repairDriver').value = r.driver || '';
+            document.getElementById('repairOdometer').value = r.odometer || '';
+            if (r.items && r.items.length > 0) {
+                repairItems = r.items.map((item, idx) => ({ id: Date.now() + idx, name: item.name || '', desc: item.desc || '', inStock: item.inStock || false }));
+            }
+            if (r.pdfFile) {
+                repairPdfBase64 = r.pdfFile;
+                document.getElementById('repairPdfName').textContent = 'ملف PDF محفوظ';
+                document.getElementById('repairPdfPreview').classList.remove('hidden');
+            }
+        }
+    } else {
+        ['repairDate','repairDriver','repairOdometer'].forEach(id => document.getElementById(id).value = '');
+    }
+    renderRepairItems();
+    document.getElementById('repairModal').classList.remove('hidden');
+}
+function closeRepairForm() { document.getElementById('repairModal').classList.add('hidden'); }
+
+function viewRepair(id) {
+    const r = window.repairsData.find(x => x.id === id);
+    if (!r) return;
+    let details = '=== تفاصيل طلب الإصلاح ===\n\n';
+    details += 'التاريخ: ' + (r.date || '-') + '\n';
+    details += 'اسم السائق: ' + (r.driver || '-') + '\n';
+    details += 'قراءة العداد: ' + (r.odometer || '-') + '\n\n';
+    if (r.items && r.items.length > 0) {
+        details += '=== الأصناف ===\n';
+        r.items.forEach((item, idx) => {
+            details += (idx + 1) + '. ' + (item.name || '-');
+            if (item.desc) details += ' - ' + item.desc;
+            details += item.inStock ? ' ✓ (متوفر بالمخزن)' : ' ✗ (غير متوفر)';
+            details += '\n';
+        });
+    }
+    alert(details);
+}
+
+function editRepair(id) {
+    openRepairForm(id);
+}
+
+async function deleteRepair(id) {
+    if (!confirm('هل أنت متأكد من حذف طلب الإصلاح؟')) return;
+    await db.collection('repairs').doc(id).delete();
+    loadRepairs();
+}
+
+async function saveRepair() {
+    const date = document.getElementById('repairDate').value;
+    const driver = document.getElementById('repairDriver').value;
+    if (!date || !driver) { alert('يرجى ملء التاريخ واسم السائق'); return; }
+    
+    const data = {
+        carId: selectedCarId,
+        date: date,
+        driver: driver,
+        odometer: document.getElementById('repairOdometer').value,
+        items: repairItems.map(item => ({ name: item.name, desc: item.desc, inStock: item.inStock })),
+        pdfFile: repairPdfBase64,
+        userId: currentUser.uid
+    };
+    
+    if (window.editingRepairId) {
+        await db.collection('repairs').doc(window.editingRepairId).update(data);
+    } else {
+        await db.collection('repairs').add(data);
+    }
+    closeRepairForm();
+    loadRepairs();
+    alert('تم الحفظ بنجاح');
+}
+
+function openInvoiceForm(editId = null) {
+    window.editingInvoiceId = editId;
+    invPdfBase64 = '';
+    invItems = [];
+    document.getElementById('invPdf').value = '';
+    document.getElementById('invPdfPreview').classList.add('hidden');
+    
+    if (editId && window.invoicesData) {
+        const i = window.invoicesData.find(x => x.id === editId);
+        if (i) {
+            document.getElementById('invNum').value = i.num || '';
+            document.getElementById('invVendor').value = i.vendor || '';
+            if (i.items && i.items.length > 0) {
+                invItems = i.items.map((item, idx) => ({ id: Date.now() + idx, name: item.name || '', price: item.price || '', qty: item.qty || '' }));
+            }
+            if (i.pdfFile) {
+                invPdfBase64 = i.pdfFile;
+                document.getElementById('invPdfName').textContent = 'ملف PDF محفوظ';
+                document.getElementById('invPdfPreview').classList.remove('hidden');
+            }
+        }
+    } else {
+        ['invNum','invVendor'].forEach(id => document.getElementById(id).value = '');
+    }
+    renderInvItems();
+    document.getElementById('invoiceModal').classList.remove('hidden');
+}
+function closeInvoiceForm() { document.getElementById('invoiceModal').classList.add('hidden'); }
+
+function viewInvoice(id) {
+    const i = window.invoicesData.find(x => x.id === id);
+    if (!i) return;
+    let details = '=== تفاصيل الفاتورة ===\n\n';
+    details += 'رقم الفاتورة: ' + (i.num || '-') + '\n';
+    details += 'اسم الجهة: ' + (i.vendor || '-') + '\n';
+    details += 'الإجمالي: ' + (i.total || '-') + ' ج.م\n\n';
+    if (i.items && i.items.length > 0) {
+        details += '=== الأصناف ===\n';
+        i.items.forEach((item, idx) => {
+            const price = parseFloat(item.price) || 0;
+            const qty = parseFloat(item.qty) || 1;
+            const itemTotal = price * qty;
+            details += (idx + 1) + '. ' + (item.name || '-');
+            details += ' | السعر: ' + price.toFixed(2);
+            details += ' | الكمية: ' + qty;
+            details += ' | الإجمالي: ' + itemTotal.toFixed(2) + ' ج.م';
+            details += '\n';
+        });
+    }
+    alert(details);
+}
+
+function editInvoice(id) {
+    openInvoiceForm(id);
+}
+
+async function deleteInvoice(id) {
+    if (!confirm('هل أنت متأكد من حذف الفاتورة؟')) return;
+    await db.collection('invoices').doc(id).delete();
+    loadInvoices();
+}
+
+async function saveInvoice() {
+    const num = document.getElementById('invNum').value;
+    const vendor = document.getElementById('invVendor').value;
+    if (!num || !vendor) { alert('يرجى ملء البيانات الأساسية'); return; }
+    
+    // Check duplicate invoice number across ALL invoices (not just this car)
+    const existing = await db.collection('invoices').where('num', '==', num).where('userId', '==', currentUser.uid).get();
+    if (!existing.empty) {
+        // If editing, check if it's the same invoice
+        if (window.editingInvoiceId) {
+            const isSameInvoice = existing.docs.some(doc => doc.id === window.editingInvoiceId);
+            if (!isSameInvoice) {
+                alert('لا يمكن حفظ الفاتورة - رقم الفاتورة "' + num + '" موجود مسبقاً');
+                return;
+            }
+        } else {
+            alert('لا يمكن حفظ الفاتورة - رقم الفاتورة "' + num + '" موجود مسبقاً');
+            return;
+        }
+    }
+    
+    const data = {
+        carId: selectedCarId,
+        num: num,
+        vendor: vendor,
+        items: invItems.map(item => ({ name: item.name, price: item.price, qty: item.qty })),
+        pdfFile: invPdfBase64,
+        userId: currentUser.uid
+    };
+    
+    if (window.editingInvoiceId) {
+        await db.collection('invoices').doc(window.editingInvoiceId).update(data);
+    } else {
+        await db.collection('invoices').add(data);
+    }
+    closeInvoiceForm();
+    loadInvoices();
+    alert('تم الحفظ بنجاح');
+}
+
+// Open PDF function
+function openPdf(id, type) {
+    let pdfData = '';
+    if (type === 'repair' && window.repairsData) {
+        const r = window.repairsData.find(x => x.id === id);
+        if (r && r.pdfFile) pdfData = r.pdfFile;
+    } else if (type === 'invoice' && window.invoicesData) {
+        const i = window.invoicesData.find(x => x.id === id);
+        if (i && i.pdfFile) pdfData = i.pdfFile;
+    }
+    
+    if (pdfData) {
+        const win = window.open();
+        win.document.write('<iframe width="100%" height="100%" src="' + pdfData + '"></iframe>');
+    } else {
+        alert('لا يوجد ملف PDF');
+    }
+}
+
+let searchResults = [];
+let currentSearchType = 'car';
+let carReportData = null;
+let invoiceReportData = [];
+let itemReportData = [];
+
+function setSearchType(type) {
+    currentSearchType = type;
+    document.getElementById('searchTypeCar').className = type === 'car' ? 'px-4 py-2 rounded-lg bg-blue-600 text-white' : 'px-4 py-2 rounded-lg bg-gray-200';
+    document.getElementById('searchTypeInvoice').className = type === 'invoice' ? 'px-4 py-2 rounded-lg bg-blue-600 text-white' : 'px-4 py-2 rounded-lg bg-gray-200';
+    document.getElementById('searchTypeItem').className = type === 'item' ? 'px-4 py-2 rounded-lg bg-blue-600 text-white' : 'px-4 py-2 rounded-lg bg-gray-200';
+    
+    document.getElementById('searchByCar').classList.toggle('hidden', type !== 'car');
+    document.getElementById('searchByInvoice').classList.toggle('hidden', type !== 'invoice');
+    document.getElementById('searchByItem').classList.toggle('hidden', type !== 'item');
+    
+    // Hide all results
+    document.getElementById('searchResults').classList.add('hidden');
+    document.getElementById('carReportSection').classList.add('hidden');
+    document.getElementById('invoiceSearchResults').classList.add('hidden');
+    document.getElementById('itemSearchResults').classList.add('hidden');
+}
+
+function updateReportCarSelect() {
+    document.getElementById('reportCarSelect').innerHTML = '<option value="">-- اختر سيارة --</option>' + allCars.map(c => '<option value="' + c.id + '">' + c.plateL + ' - ' + c.plateN + ' (' + c.brand + ')</option>').join('');
+}
+
+async function loadCarReport() {
+    const carId = document.getElementById('reportCarSelect').value;
+    if (!carId) {
+        document.getElementById('carReportSection').classList.add('hidden');
+        return;
+    }
+    
+    const car = allCars.find(c => c.id === carId);
+    if (!car) return;
+    
+    // Load repairs and invoices for this car
+    const repairsSnapshot = await db.collection('repairs').where('carId', '==', carId).get();
+    const repairs = repairsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    
+    const invoicesSnapshot = await db.collection('invoices').where('carId', '==', carId).get();
+    const invoices = invoicesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    
+    carReportData = { car, repairs, invoices };
+    
+    let html = '<div class="border-b pb-4 mb-4">';
+    html += '<h4 class="font-bold text-blue-800 mb-2">بيانات السيارة</h4>';
+    html += '<div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">';
+    html += '<div><span class="text-gray-500">اللوحة:</span> ' + car.plateL + ' - ' + car.plateN + '</div>';
+    html += '<div><span class="text-gray-500">الماركة:</span> ' + car.brand + '</div>';
+    html += '<div><span class="text-gray-500">الموديل:</span> ' + car.year + '</div>';
+    html += '<div><span class="text-gray-500">الحالة:</span> ' + car.status + '</div>';
+    html += '<div><span class="text-gray-500">النوع:</span> ' + car.carType + '</div>';
+    html += '<div><span class="text-gray-500">الوقود:</span> ' + car.fuel + '</div>';
+    if (car.custodian) html += '<div><span class="text-gray-500">المستعهد:</span> ' + car.custodian + '</div>';
+    html += '</div></div>';
+    
+    // Repairs section
+    html += '<div class="border-b pb-4 mb-4">';
+    html += '<h4 class="font-bold text-green-800 mb-2">طلبات الإصلاح (' + repairs.length + ')</h4>';
+    if (repairs.length === 0) {
+        html += '<p class="text-gray-500 text-sm">لا توجد طلبات إصلاح</p>';
+    } else {
+        html += '<div class="space-y-2">';
+        repairs.forEach((r, idx) => {
+            html += '<div class="bg-gray-50 p-2 rounded text-sm">';
+            html += '<div class="font-medium">' + (idx + 1) + '. ' + (r.date || '-') + ' - ' + (r.driver || '-') + '</div>';
+            if (r.items && r.items.length > 0) {
+                html += '<div class="mr-4 text-gray-600">الأصناف: ';
+                html += r.items.map(item => item.name + (item.inStock ? ' ✓' : ' ✗')).join('، ');
+                html += '</div>';
+            }
+            html += '</div>';
+        });
+        html += '</div>';
+    }
+    html += '</div>';
+    
+    // Invoices section
+    html += '<div>';
+    html += '<h4 class="font-bold text-purple-800 mb-2">الفواتير (' + invoices.length + ')</h4>';
+    if (invoices.length === 0) {
+        html += '<p class="text-gray-500 text-sm">لا توجد فواتير</p>';
+    } else {
+        let totalAmount = 0;
+        html += '<div class="space-y-2">';
+        invoices.forEach((inv, idx) => {
+            totalAmount += parseFloat(inv.total) || 0;
+            html += '<div class="bg-gray-50 p-2 rounded text-sm">';
+            html += '<div class="font-medium">' + (idx + 1) + '. فاتورة #' + inv.num + ' - ' + inv.vendor + ' - ' + inv.total + ' ج.م</div>';
+            if (inv.items && inv.items.length > 0) {
+                html += '<div class="mr-4 text-gray-600">الأصناف: ';
+                html += inv.items.map(item => item.name + ' (' + (item.qty || 1) + ' × ' + (item.price || 0) + ')').join('، ');
+                html += '</div>';
+            }
+            html += '</div>';
+        });
+        html += '</div>';
+        html += '<div class="mt-3 p-2 bg-purple-100 rounded font-bold">إجمالي الفواتير: ' + totalAmount.toFixed(2) + ' ج.م</div>';
+    }
+    html += '</div>';
+    
+    document.getElementById('carReportContent').innerHTML = html;
+    document.getElementById('carReportSection').classList.remove('hidden');
+    document.getElementById('searchResults').classList.add('hidden');
+}
+
+async function searchByInvoiceNum() {
+    const query = document.getElementById('invoiceSearchQuery').value.trim();
+    if (!query) { alert('أدخل رقم الفاتورة'); return; }
+    
+    const snapshot = await db.collection('invoices').where('userId', '==', currentUser.uid).get();
+    const allInvoices = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    
+    invoiceReportData = allInvoices.filter(inv => inv.num && inv.num.includes(query));
+    
+    if (invoiceReportData.length === 0) {
+        document.getElementById('invoiceResultsContent').innerHTML = '<p class="text-gray-500 text-center py-4">لا توجد نتائج</p>';
+    } else {
+        let html = '<div class="space-y-3">';
+        for (const inv of invoiceReportData) {
+            const car = allCars.find(c => c.id === inv.carId);
+            html += '<div class="bg-gray-50 p-3 rounded border">';
+            html += '<div class="font-bold text-purple-800">فاتورة #' + inv.num + '</div>';
+            html += '<div class="text-sm text-gray-600">الجهة: ' + inv.vendor + ' | الإجمالي: ' + inv.total + ' ج.م</div>';
+            if (car) html += '<div class="text-sm text-blue-600">السيارة: ' + car.plateL + ' - ' + car.plateN + ' (' + car.brand + ')</div>';
+            if (inv.items && inv.items.length > 0) {
+                html += '<div class="text-sm mt-1">الأصناف: ' + inv.items.map(i => i.name).join('، ') + '</div>';
+            }
+            html += '</div>';
+        }
+        html += '</div>';
+        document.getElementById('invoiceResultsContent').innerHTML = html;
+    }
+    document.getElementById('invoiceSearchResults').classList.remove('hidden');
+}
+
+async function searchByItemName() {
+    const query = document.getElementById('itemSearchQuery').value.trim().toLowerCase();
+    if (!query) { alert('أدخل اسم الصنف'); return; }
+    
+    itemReportData = { repairs: [], invoices: [] };
+    
+    // Search in repairs
+    const repairsSnapshot = await db.collection('repairs').where('userId', '==', currentUser.uid).get();
+    const allRepairs = repairsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    
+    allRepairs.forEach(r => {
+        if (r.items && r.items.some(item => item.name && item.name.toLowerCase().includes(query))) {
+            itemReportData.repairs.push(r);
+        }
+    });
+    
+    // Search in invoices
+    const invoicesSnapshot = await db.collection('invoices').where('userId', '==', currentUser.uid).get();
+    const allInvoices = invoicesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    
+    allInvoices.forEach(inv => {
+        if (inv.items && inv.items.some(item => item.name && item.name.toLowerCase().includes(query))) {
+            itemReportData.invoices.push(inv);
+        }
+    });
+    
+    let html = '';
+    
+    // Repairs with this item
+    html += '<div class="mb-4">';
+    html += '<h4 class="font-bold text-green-800 mb-2">طلبات الإصلاح (' + itemReportData.repairs.length + ')</h4>';
+    if (itemReportData.repairs.length === 0) {
+        html += '<p class="text-gray-500 text-sm">لا توجد طلبات إصلاح تحتوي على هذا الصنف</p>';
+    } else {
+        html += '<div class="space-y-2">';
+        itemReportData.repairs.forEach(r => {
+            const car = allCars.find(c => c.id === r.carId);
+            html += '<div class="bg-gray-50 p-2 rounded text-sm border">';
+            html += '<div class="font-medium">' + (r.date || '-') + ' - ' + (r.driver || '-') + '</div>';
+            if (car) html += '<div class="text-blue-600">السيارة: ' + car.plateL + ' - ' + car.plateN + '</div>';
+            html += '<div class="text-gray-600">الأصناف: ' + r.items.map(i => '<span class="' + (i.name.toLowerCase().includes(query) ? 'bg-yellow-200 px-1 rounded' : '') + '">' + i.name + '</span>').join('، ') + '</div>';
+            html += '</div>';
+        });
+        html += '</div>';
+    }
+    html += '</div>';
+    
+    // Invoices with this item
+    html += '<div>';
+    html += '<h4 class="font-bold text-purple-800 mb-2">الفواتير (' + itemReportData.invoices.length + ')</h4>';
+    if (itemReportData.invoices.length === 0) {
+        html += '<p class="text-gray-500 text-sm">لا توجد فواتير تحتوي على هذا الصنف</p>';
+    } else {
+        html += '<div class="space-y-2">';
+        itemReportData.invoices.forEach(inv => {
+            const car = allCars.find(c => c.id === inv.carId);
+            html += '<div class="bg-gray-50 p-2 rounded text-sm border">';
+            html += '<div class="font-medium">فاتورة #' + inv.num + ' - ' + inv.vendor + ' - ' + inv.total + ' ج.م</div>';
+            if (car) html += '<div class="text-blue-600">السيارة: ' + car.plateL + ' - ' + car.plateN + '</div>';
+            html += '<div class="text-gray-600">الأصناف: ' + inv.items.map(i => '<span class="' + (i.name.toLowerCase().includes(query) ? 'bg-yellow-200 px-1 rounded' : '') + '">' + i.name + '</span>').join('، ') + '</div>';
+            html += '</div>';
+        });
+        html += '</div>';
+    }
+    html += '</div>';
+    
+    document.getElementById('itemResultsContent').innerHTML = html;
+    document.getElementById('itemSearchResults').classList.remove('hidden');
+}
+
+// PDF Download Functions
+function downloadCarReportPDF() {
+    if (!carReportData) return;
+    
+    const { car, repairs, invoices } = carReportData;
+    let content = 'تقرير شامل للسيارة\n';
+    content += '═══════════════════════════════\n\n';
+    content += 'بيانات السيارة:\n';
+    content += '─────────────────\n';
+    content += 'اللوحة: ' + car.plateL + ' - ' + car.plateN + '\n';
+    content += 'الماركة: ' + car.brand + '\n';
+    content += 'الموديل: ' + car.year + '\n';
+    content += 'النوع: ' + car.carType + '\n';
+    content += 'الحالة: ' + car.status + '\n';
+    content += 'الوقود: ' + car.fuel + '\n';
+    if (car.custodian) content += 'المستعهد: ' + car.custodian + '\n';
+    
+    content += '\n\nطلبات الإصلاح (' + repairs.length + '):\n';
+    content += '─────────────────\n';
+    repairs.forEach((r, idx) => {
+        content += (idx + 1) + '. ' + (r.date || '-') + ' - ' + (r.driver || '-') + '\n';
+        if (r.items && r.items.length > 0) {
+            content += '   الأصناف: ' + r.items.map(i => i.name + (i.inStock ? ' ✓' : ' ✗')).join('، ') + '\n';
+        }
+    });
+    
+    content += '\n\nالفواتير (' + invoices.length + '):\n';
+    content += '─────────────────\n';
+    let total = 0;
+    invoices.forEach((inv, idx) => {
+        total += parseFloat(inv.total) || 0;
+        content += (idx + 1) + '. فاتورة #' + inv.num + ' - ' + inv.vendor + ' - ' + inv.total + ' ج.م\n';
+        if (inv.items && inv.items.length > 0) {
+            content += '   الأصناف: ' + inv.items.map(i => i.name).join('، ') + '\n';
+        }
+    });
+    content += '\nإجمالي الفواتير: ' + total.toFixed(2) + ' ج.م\n';
+    
+    downloadTextAsPDF(content, 'تقرير_سيارة_' + car.plateL + '_' + car.plateN + '.pdf');
+}
+
+function downloadInvoiceReportPDF() {
+    if (invoiceReportData.length === 0) return;
+    
+    let content = 'تقرير البحث بالفواتير\n';
+    content += '═══════════════════════════════\n\n';
+    
+    invoiceReportData.forEach((inv, idx) => {
+        const car = allCars.find(c => c.id === inv.carId);
+        content += (idx + 1) + '. فاتورة #' + inv.num + '\n';
+        content += '   الجهة: ' + inv.vendor + '\n';
+        content += '   الإجمالي: ' + inv.total + ' ج.م\n';
+        if (car) content += '   السيارة: ' + car.plateL + ' - ' + car.plateN + ' (' + car.brand + ')\n';
+        if (inv.items && inv.items.length > 0) {
+            content += '   الأصناف: ' + inv.items.map(i => i.name).join('، ') + '\n';
+        }
+        content += '\n';
+    });
+    
+    downloadTextAsPDF(content, 'تقرير_فواتير.pdf');
+}
+
+function downloadItemReportPDF() {
+    if (itemReportData.repairs.length === 0 && itemReportData.invoices.length === 0) return;
+    
+    const query = document.getElementById('itemSearchQuery').value;
+    let content = 'تقرير البحث بالصنف: ' + query + '\n';
+    content += '═══════════════════════════════\n\n';
+    
+    content += 'طلبات الإصلاح (' + itemReportData.repairs.length + '):\n';
+    content += '─────────────────\n';
+    itemReportData.repairs.forEach((r, idx) => {
+        const car = allCars.find(c => c.id === r.carId);
+        content += (idx + 1) + '. ' + (r.date || '-') + ' - ' + (r.driver || '-') + '\n';
+        if (car) content += '   السيارة: ' + car.plateL + ' - ' + car.plateN + '\n';
+        if (r.items) content += '   الأصناف: ' + r.items.map(i => i.name).join('، ') + '\n';
+        content += '\n';
+    });
+    
+    content += '\nالفواتير (' + itemReportData.invoices.length + '):\n';
+    content += '─────────────────\n';
+    itemReportData.invoices.forEach((inv, idx) => {
+        const car = allCars.find(c => c.id === inv.carId);
+        content += (idx + 1) + '. فاتورة #' + inv.num + ' - ' + inv.vendor + ' - ' + inv.total + ' ج.م\n';
+        if (car) content += '   السيارة: ' + car.plateL + ' - ' + car.plateN + '\n';
+        if (inv.items) content += '   الأصناف: ' + inv.items.map(i => i.name).join('، ') + '\n';
+        content += '\n';
+    });
+    
+    downloadTextAsPDF(content, 'تقرير_صنف_' + query + '.pdf');
+}
+
+function downloadTextAsPDF(content, filename) {
+    // Create a printable HTML
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write('<html dir="rtl"><head><title>' + filename + '</title>');
+    printWindow.document.write('<style>body { font-family: Arial, sans-serif; padding: 20px; white-space: pre-wrap; line-height: 1.8; } @media print { body { padding: 0; } }</style>');
+    printWindow.document.write('</head><body>');
+    printWindow.document.write(content.replace(/\n/g, '<br>'));
+    printWindow.document.write('</body></html>');
+    printWindow.document.close();
+    printWindow.print();
+}
+
+function searchCars() {
+    const query = document.getElementById('searchQuery').value.toLowerCase().trim();
+    searchResults = !query ? [...allCars] : allCars.filter(c => 
+        (c.plateL && c.plateL.toLowerCase().includes(query)) ||
+        (c.plateN && c.plateN.toLowerCase().includes(query)) ||
+        (c.brand && c.brand.toLowerCase().includes(query)) ||
+        (c.carType && c.carType.toLowerCase().includes(query)) ||
+        (c.status && c.status.toLowerCase().includes(query)) ||
+        (c.custodian && c.custodian.toLowerCase().includes(query))
+    );
+    document.getElementById('searchResults').classList.remove('hidden');
+    document.getElementById('carReportSection').classList.add('hidden');
+    document.getElementById('resultsBody').innerHTML = searchResults.map(c => '<tr class="border-b"><td class="p-2">' + c.plateL + ' - ' + c.plateN + '</td><td class="p-2">' + c.brand + '</td><td class="p-2">' + c.year + '</td><td class="p-2">' + c.carType + '</td><td class="p-2"><span class="px-2 py-1 rounded text-xs ' + (c.status === 'صالحة' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800') + '">' + c.status + '</span></td></tr>').join('');
+}
+
+function exportCSV() {
+    if (searchResults.length === 0) { alert('لا توجد نتائج للتصدير'); return; }
+    const headers = ['اللوحة', 'الماركة', 'الموديل', 'النوع', 'الحالة', 'الوقود', 'المستعهد'];
+    const rows = searchResults.map(c => [c.plateL + '-' + c.plateN, c.brand, c.year, c.carType, c.status, c.fuel, c.custodian || '']);
+    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'cars_report.csv';
+    a.click();
+}
+</script>
+</body>
+</html>
